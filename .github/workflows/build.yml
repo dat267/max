@@ -32,14 +32,20 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p build
-          # Always output to 'build/max', handle .exe for windows if necessary, 
-          # but the user requested the name 'max'. 
-          # Note: Windows usually requires .exe to be executable, but we will name it 'max' as requested.
+          # Always output to 'build/max'
           OUTPUT_NAME="max"
+          # Rename/Move for the upload phase
+          UPLOAD_NAME="max-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" == "windows" ]; then
+            UPLOAD_NAME="${UPLOAD_NAME}.exe"
+          fi
+          
           go build -v -o build/${OUTPUT_NAME} ./cmd/max
+          cp build/${OUTPUT_NAME} build/${UPLOAD_NAME}
+          
           # Ensure env vars are set properly for the next step
-          echo "ASSET_PATH=build/${OUTPUT_NAME}" >> $GITHUB_ENV
-          echo "ASSET_NAME=${OUTPUT_NAME}" >> $GITHUB_ENV
+          echo "ASSET_PATH=build/${UPLOAD_NAME}" >> $GITHUB_ENV
+          echo "ASSET_NAME=${UPLOAD_NAME}" >> $GITHUB_ENV
       
       - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
