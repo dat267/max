@@ -32,11 +32,10 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p build
-          # Explicitly set output name
-          OUTPUT_NAME="max-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "${{ matrix.goos }}" == "windows" ]; then
-            OUTPUT_NAME="${OUTPUT_NAME}.exe"
-          fi
+          # Always output to 'build/max', handle .exe for windows if necessary, 
+          # but the user requested the name 'max'. 
+          # Note: Windows usually requires .exe to be executable, but we will name it 'max' as requested.
+          OUTPUT_NAME="max"
           go build -v -o build/${OUTPUT_NAME} ./cmd/max
           # Ensure env vars are set properly for the next step
           echo "ASSET_PATH=build/${OUTPUT_NAME}" >> $GITHUB_ENV
