@@ -22,17 +22,20 @@ Download pre-built binaries from [Releases](https://github.com/dat267/max/releas
 
 **Linux/macOS (curl):**
 ```bash
-curl -LO https://github.com/dat267/max/releases/latest/download/max-linux-amd64
-chmod +x max-linux-amd64
+# Download and rename to 'max'
+curl -Lo max https://github.com/dat267/max/releases/latest/download/max-linux-amd64
+chmod +x max
 ```
 
 **Linux/macOS (wget):**
 ```bash
-wget https://github.com/dat267/max/releases/latest/download/max-linux-amd64
-chmod +x max-linux-amd64
+# Download and rename to 'max'
+wget -O max https://github.com/dat267/max/releases/latest/download/max-linux-amd64
+chmod +x max
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://github.com/dat267/max/releases/latest/download/max-windows-amd64.exe | Out-File max.exe
+# Download and save as 'max.exe'
+irm https://github.com/dat267/max/releases/latest/download/max-windows-amd64.exe -OutFile max.exe
 ```
