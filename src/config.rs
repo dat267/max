@@ -6,7 +6,7 @@ use std::path::Path;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub admin_token: Option<String>,
 
     #[serde(default)]
@@ -208,4 +208,61 @@ fn env_string_to_value(val: &str) -> serde_json::Value {
         return serde_json::Value::Number(n);
     }
     serde_json::Value::String(val.to_owned())
+}
+
+/// Compile-time mapping from CLI-arg fields to [`Config`] paths.
+///
+/// Unlike the old serde round-trip approach, this macro produces direct
+/// field assignments with `if self.field.is_none()` guards so that CLI
+/// flags always take precedence over config-file values.
+///
+/// # Single-segment paths
+///
+/// When the config path is a single field, the field type must already be
+/// `Option<T>` — the value is cloned directly:
+///
+/// ```ignore
+/// config_defaults!(GreetArgs {
+///     admin_token => (admin_token),
+/// });
+/// // Expands to:
+/// // self.admin_token = config.admin_token.clone();
+/// ```
+///
+/// # Multi-segment paths
+///
+/// When the config path spans nested structs (e.g. `core.timeout`), the
+/// target CLI field receives `Some(config.core.timeout.clone())`:
+///
+/// ```ignore
+/// config_defaults!(MyArgs {
+///     core_timeout => (core, timeout),
+/// });
+/// // Expands to:
+/// // self.core_timeout = Some(config.core.timeout.clone());
+/// ```
+#[macro_export]
+macro_rules! config_defaults {
+    ($ty:ty { $($field:ident => ($single:ident)),+ $(,)? }) => {
+        impl $ty {
+            pub fn apply_config_defaults(&mut self, config: &$crate::config::Config) {
+                $(
+                    if self.$field.is_none() {
+                        self.$field = config.$single.clone();
+                    }
+                )+
+            }
+        }
+    };
+    ($ty:ty { $($field:ident => ($first:ident $(, $rest:ident)+)),+ $(,)? }) => {
+        impl $ty {
+            pub fn apply_config_defaults(&mut self, config: &$crate::config::Config) {
+                $(
+                    if self.$field.is_none() {
+                        self.$field = Some(config.$first $(.$rest)+ .clone());
+                    }
+                )+
+            }
+        }
+    };
 }

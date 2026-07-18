@@ -9,15 +9,10 @@ Every CLI I write needs the same boilerplate: config file resolution, environmen
 ## Quick Start
 
 ```bash
-# Clone as a new project
 git clone <this-repo> my-new-cli
 cd my-new-cli
-
-# Rename (replace all occurrences of "max" with your app name)
-# Then build
 cargo build
 
-# Try it
 cargo run -- greet
 cargo run -- config init
 cargo run -- config show
@@ -29,7 +24,7 @@ cargo run -- config show
 src/
   main.rs              # Entry point: app name resolution, config loading, dispatch
   cli.rs               # clap CLI definitions (Cli, Commands, subcommand enums)
-  config.rs            # Config struct, JSON loading, env override merging
+  config.rs            # Config struct, JSON loading, env override, ConfigDefaults trait
   commands/
     mod.rs             # Module exports
     config.rs          # config {init, show, path} subcommand
@@ -64,15 +59,16 @@ The config file is located in this priority order:
 
 Field naming is `kebab-case` in JSON, which maps to `snake_case` in Rust.
 
-### Layered Configuration
+### Layered Configuration — Specificity Precedence
 
-Values are merged with the following precedence (highest wins):
+Values are resolved with strict override specificity:
 
 ```
 CLI flags  >  Environment variables  >  Config file  >  Struct defaults
 ```
 
-Each layer overrides the one before it.
+Each layer overrides the one before it. A value provided via CLI flag takes
+ultimate precedence over everything.
 
 ### Environment Variable Overrides
 
@@ -92,6 +88,44 @@ MAX_DEBUG=true MAX_DRY_RUN=true MAX_CORE_TIMEOUT=5m my-app greet
 ```
 
 Env-var values are typed automatically: `"true"/"1"/"yes"` → bool, `"42"` → integer, otherwise string.
+
+### Auto-Wiring: Config Values as CLI Flag Defaults
+
+When you add a CLI flag to any subcommand, if the flag's name (in kebab-case)
+matches a key in the config file, the config value automatically becomes the
+flag's default. **No manual wiring required.**
+
+This works through the `ConfigDefaults` trait: before a command runs,
+`flat_config_strings(config)` builds a flat key→value map from the config,
+and `set_in_args` injects any matching value into the serialized args struct
+where the field is currently `null`.
+
+```rust
+#[derive(clap::Args, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct FetchArgs {
+    #[arg(long)]
+    pub core_timeout: Option<String>,  // auto-defaults from config.core.timeout
+
+    #[arg(long)]
+    pub retries: Option<i32>,          // auto-defaults from config.core.retries
+
+    pub url: String,                   // no config match — local only
+}
+```
+
+#### Field Naming Rules
+
+| Rust field | CLI flag | Config key | Auto-wired? |
+|---|---|---|---|
+| `core_timeout` | `--core-timeout` | `core.timeout` | Yes — matches via flat key `core-timeout` |
+| `dry_run` | `--dry-run` | `dry-run` | Yes — atomic kebab key |
+| `admin_token` | `--admin-token` | `admin-token` | Yes |
+| `url` | `URL` | _(none)_ | No — no matching config key |
+
+If the field name (after kebab-case conversion) matches a config leaf path,
+the config value becomes the CLI default. Fields with no matching config key
+are purely local to the subcommand.
 
 ### Global Flags
 
@@ -118,59 +152,96 @@ Manage the application configuration file.
 
 #### `greet [name]`
 
-Print a personalized greeting. Falls back to `admin-token` from config, then `"World"`.
+Print a personalized greeting. Supports `--admin-token` which auto-defaults
+from the config, falls back to `"World"`.
 
 ```bash
-my-app greet              # Hello, World!
-my-app greet Alice        # Hello, Alice!
-MAX_ADMIN_TOKEN=bot my-app greet  # Hello, bot!
+my-app greet                        # Hello, World!
+my-app greet Alice                  # Hello, Alice!
+my-app greet --admin-token bot      # Hello, bot!
+MAX_ADMIN_TOKEN=bot my-app greet    # Hello, bot!
+MAX_ADMIN_TOKEN=env my-app greet --admin-token cli  # Hello, cli!  (CLI wins)
 ```
 
 ## Adding a New Subcommand
 
-1. **Define CLI args** in `src/cli.rs`:
-   ```rust
-   #[derive(clap::Args)]
-   pub struct FooArgs {
-       pub bar: String,
-       #[arg(short, long)]
-       pub count: Option<i32>,
-   }
-   ```
+Adding a subcommand involves three steps:
 
-2. **Add to the enum** in `src/cli.rs`:
-   ```rust
-   pub enum Commands {
-       // ... existing commands ...
-       #[command(about = "Do foo things")]
-       Foo(FooArgs),
-   }
-   ```
+### 1. Define the Args Struct
 
-3. **Create `src/commands/foo.rs`**:
-   ```rust
-   use crate::cli::FooArgs;
-   use crate::config::Config;
-   use anyhow::Result;
+In `src/cli.rs`, add your args struct. Derive `clap::Args`, `serde::Serialize`,
+and `serde::Deserialize` with `rename_all = "kebab-case"`:
 
-   pub fn execute(args: &FooArgs, config: &Config) -> Result<()> {
-       // Your logic here — config is fully merged at this point
-       Ok(())
-   }
-   ```
+```rust
+#[derive(clap::Args, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct FetchArgs {
+    #[arg(long, help = "Request timeout")]
+    pub core_timeout: Option<String>,
 
-4. **Register it** in `src/commands/mod.rs`:
-   ```rust
-   pub mod config;
-   pub mod greet;
-   pub mod foo;
-   ```
+    #[arg(long, help = "Max retries")]
+    pub retries: Option<i32>,
 
-5. **Wire it up** in `src/main.rs`:
-   ```rust
-   Commands::Foo(args) => commands::foo::execute(args, cfg)
-       .context("foo command failed")?,
-   ```
+    pub url: String,
+}
+```
+
+Fields named to match config keys (after kebab-case conversion) will
+auto-inherit their defaults from the config file or environment variables.
+
+### 2. Register the Subcommand
+
+Add it to the `Commands` enum:
+
+```rust
+pub enum Commands {
+    Config(ConfigCommands),
+    Greet(GreetArgs),
+    #[command(about = "Fetch a resource")]
+    Fetch(FetchArgs),
+}
+```
+
+### 3. Create the Command Handler
+
+`src/commands/fetch.rs`:
+
+```rust
+use crate::cli::FetchArgs;
+use crate::config::Config;
+use anyhow::Result;
+
+pub fn execute(args: &FetchArgs, config: &Config) -> Result<()> {
+    // args.core_timeout already defaults from config.core.timeout
+    // args.retries already defaults from config.core.retries
+    // config.debug, config.dry_run are available for global behavior
+    Ok(())
+}
+```
+
+### 4. Register the Module
+
+`src/commands/mod.rs`:
+
+```rust
+pub mod config;
+pub mod greet;
+pub mod fetch;
+```
+
+### 5. Wire It Up
+
+In `src/main.rs`:
+
+```rust
+Commands::Fetch(mut args) => {
+    args.apply_config_defaults(cfg);
+    commands::fetch::execute(&args, cfg)
+        .context("fetch command failed")?
+}
+```
+
+That's it — config, env vars, and CLI flags are all automatically resolved.
 
 ## Dependencies
 

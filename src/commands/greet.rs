@@ -6,7 +6,7 @@ pub fn execute(args: &GreetArgs, config: &Config) -> Result<()> {
     let name = args
         .name
         .as_deref()
-        .or(config.admin_token.as_deref())
+        .or(args.admin_token.as_deref())
         .unwrap_or("World");
 
     let greeting = if config.debug {

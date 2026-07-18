@@ -44,7 +44,7 @@ fn main() -> Result<()> {
         eprintln!("[dry-run] DRY-RUN is enabled — no destructive actions will be taken");
     }
 
-    run_command(&cli, &cfg, &config_path)
+    run_command(cli, &cfg, &config_path)
 }
 
 fn resolve_app_name() -> String {
@@ -109,12 +109,15 @@ fn resolve_config_path(app_name: &str, from_args: Option<&str>) -> PathBuf {
     PathBuf::from(format!("{app_name}.json"))
 }
 
-fn run_command(cli: &Cli, cfg: &Config, config_path: &Path) -> Result<()> {
-    match &cli.command {
-        Commands::Config(cmd) => commands::config::execute(cmd, cfg, config_path)
+fn run_command(cli: Cli, cfg: &Config, config_path: &Path) -> Result<()> {
+    match cli.command {
+        Commands::Config(cmd) => commands::config::execute(&cmd, cfg, config_path)
             .context("config command failed")?,
-        Commands::Greet(args) => commands::greet::execute(args, cfg)
-            .context("greet command failed")?,
+        Commands::Greet(mut args) => {
+            args.apply_config_defaults(cfg);
+            commands::greet::execute(&args, cfg)
+                .context("greet command failed")?
+        }
     }
     Ok(())
 }

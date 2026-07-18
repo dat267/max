@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use crate::config_defaults;
 
 pub const DEFAULT_APP_NAME: &str = "max";
 pub const APP_DESCRIPTION: &str = "Internal workflows and troubleshooting utility";
@@ -31,8 +32,15 @@ pub enum Commands {
 
 #[derive(clap::Args)]
 pub struct GreetArgs {
+    #[arg(long, help = "Admin token for authentication")]
+    pub admin_token: Option<String>,
+
     pub name: Option<String>,
 }
+
+config_defaults!(GreetArgs {
+    admin_token => (admin_token),
+});
 
 #[derive(Subcommand)]
 pub enum ConfigCommands {
