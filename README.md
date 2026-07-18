@@ -41,7 +41,7 @@ Every CLI I write needs the same boilerplate: config file resolution, environmen
 Click **"Use this template"** at the top of the [GitHub page](https://github.com/dat267/max), then clone your new repo:
 
 ```bash
-git clone git@github.com:your-org/my-cli.git
+git clone git@github.com:dat267/my-cli.git
 cd my-cli
 ```
 
