@@ -2,6 +2,29 @@
 
 A scalable, opinionated base CLI application in Rust — the template I use for every new CLI I build. Modeled after a Go equivalent with `kong`, ported to idiomatic Rust with `clap`.
 
+## Install
+
+**Binary** — download from [GitHub Releases](https://github.com/dat267/max/releases):
+
+```bash
+# Linux x86_64
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-unknown-linux-gnu -o /usr/local/bin/max
+chmod +x /usr/local/bin/max
+
+# macOS arm64
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-aarch64-apple-darwin -o /usr/local/bin/max
+chmod +x /usr/local/bin/max
+
+# Windows (PowerShell)
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-pc-windows-msvc.exe -o max.exe
+```
+
+**From source**:
+
+```bash
+cargo install --git https://github.com/dat267/max
+```
+
 ## Philosophy
 
 Every CLI I write needs the same boilerplate: config file resolution, environment variable overrides, subcommand dispatch, and layered configuration merging. This template bakes all of that in so each new project starts from a solid foundation rather than `fn main()`.
