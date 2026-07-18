@@ -95,3 +95,14 @@ jobs:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.name }}
           files: ${{ env.BIN_NAME }}-*
+
+      - name: Prune old releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          KEEP=${{ env.KEEP_RELEASES }}
+          gh release list --json tagName --jq '.[].tagName' --limit 100 \
+            | tail -n +$((KEEP + 1)) \
+            | while read tag; do
+                gh release delete "$tag" --yes
+              done
