@@ -38,10 +38,10 @@ Every CLI I write needs the same boilerplate: config file resolution, environmen
 
 **Use as a template:**
 
-Click **"Use this template"** at the top of the [GitHub page](https://github.com/dat267/max), then clone your new repo:
+Click **"Use this template"** at the top of the [GitHub page](https://github.com/dat267/max) and clone your new repo, or clone directly:
 
 ```bash
-git clone git@github.com:dat267/my-cli.git
+git clone git@github.com:dat267/max.git my-cli
 cd my-cli
 ```
 
@@ -58,9 +58,11 @@ git remote remove origin
 #   - src/cli.rs        → DEFAULT_APP_NAME
 #   - README.md         → title, install URLs
 #   - .github/workflows → BIN_NAME (via repo variable)
-```
 
-Then push to your own repository.
+# Point to your own repository and push
+git remote add origin git@github.com:your-user/my-cli.git
+git push -u origin main
+```
 
 **Build and run:**
 
