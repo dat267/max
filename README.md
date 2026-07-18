@@ -6,16 +6,20 @@ A scalable, opinionated base CLI application in Rust — the template I use for 
 
 **Binary** — download from [GitHub Releases](https://github.com/dat267/max/releases):
 
+**Linux (x86_64):**
 ```bash
-# Linux x86_64
 curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-unknown-linux-gnu -o ~/.local/bin/max
 chmod +x ~/.local/bin/max
+```
 
-# macOS arm64
+**macOS (arm64):**
+```bash
 curl -sSfL https://github.com/dat267/max/releases/latest/download/max-aarch64-apple-darwin -o ~/.local/bin/max
 chmod +x ~/.local/bin/max
+```
 
-# Windows (PowerShell)
+**Windows (x86_64):**
+```powershell
 curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-pc-windows-msvc.exe -o "$env:USERPROFILE\max.exe"
 ```
 
