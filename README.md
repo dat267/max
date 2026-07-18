@@ -36,11 +36,19 @@ Every CLI I write needs the same boilerplate: config file resolution, environmen
 
 ## Quick Start
 
-```bash
-git clone <this-repo> my-new-cli
-cd my-new-cli
-cargo build
+**Use as a template:**
 
+```bash
+gh repo create my-cli --template dat267/max --clone
+cd my-cli
+```
+
+Or click **"Use this template"** at the top of the [GitHub page](https://github.com/dat267/max).
+
+**Build and run:**
+
+```bash
+cargo build
 cargo run -- greet
 cargo run -- config init
 cargo run -- config show
