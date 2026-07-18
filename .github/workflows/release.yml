@@ -106,4 +106,5 @@ jobs:
             | tail -n +$((KEEP + 1)) \
             | while read tag; do
                 gh release delete "$tag" --repo "$REPO" --yes
+                gh api -X DELETE "repos/$REPO/git/refs/tags/$tag"
               done
