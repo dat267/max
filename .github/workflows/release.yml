@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  BIN_NAME:      ${{ vars.BIN_NAME || github.event.repository.name }}
+  KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '3' }}
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            deps:  gcc-aarch64-linux-gnu
+            linker: aarch64-linux-gnu-gcc
+          - target: arm-unknown-linux-gnueabihf
+            runner: ubuntu-latest
+            deps:  gcc-arm-linux-gnueabihf
+            linker: arm-linux-gnueabihf-gcc
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+          - target: aarch64-pc-windows-msvc
+            runner: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Install system dependencies
+        if: matrix.deps != ''
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.deps }}
+
+      - name: Configure linker for cross-compilation
+        if: matrix.linker != ''
+        run: |
+          mkdir -p .cargo
+          cat >> .cargo/config.toml << EOF
+          [target.${{ matrix.target }}]
+          linker = "${{ matrix.linker }}"
+          EOF
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          SUFFIX=""
+          [[ "${{ matrix.target }}" == *-windows-* ]] && SUFFIX=".exe"
+          OUT="${BIN_NAME}-${{ matrix.target }}${SUFFIX}"
+          cp "target/${{ matrix.target }}/release/${BIN_NAME}${SUFFIX}" "$OUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.BIN_NAME }}-${{ matrix.target }}
+          path: ${{ env.BIN_NAME }}-${{ matrix.target }}*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+
+      - name: Compute release tag
+        id: meta
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "tag=${BIN_NAME}/${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "name=Release ${BIN_NAME}/${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          files: ${{ env.BIN_NAME }}-*
+
+      - name: Prune old releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          KEEP=${{ env.KEEP_RELEASES }}
+          gh release list --repo "$REPO" --json tagName --jq '.[].tagName' --limit 100 \
+            | tail -n +$((KEEP + 1)) \
+            | while read tag; do
+                gh release delete "$tag" --repo "$REPO" --yes
+                gh api -X DELETE "repos/$REPO/git/refs/tags/$tag"
+              done

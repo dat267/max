@@ -2,17 +2,70 @@
 
 A scalable, opinionated base CLI application in Rust — the template I use for every new CLI I build. Modeled after a Go equivalent with `kong`, ported to idiomatic Rust with `clap`.
 
+## Install
+
+**Binary** — download from [GitHub Releases](https://github.com/dat267/max/releases):
+
+**Linux (x86_64):**
+```bash
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-unknown-linux-gnu -o ~/.local/bin/max
+chmod +x ~/.local/bin/max
+```
+
+**macOS (arm64):**
+```bash
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-aarch64-apple-darwin -o ~/.local/bin/max
+chmod +x ~/.local/bin/max
+```
+
+**Windows (x86_64):**
+```powershell
+mkdir -Force ~\.local\bin >$null
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-pc-windows-msvc.exe -o ~\.local\bin\max.exe
+```
+
+**From source**:
+
+```bash
+cargo install --git https://github.com/dat267/max
+```
+
 ## Philosophy
 
 Every CLI I write needs the same boilerplate: config file resolution, environment variable overrides, subcommand dispatch, and layered configuration merging. This template bakes all of that in so each new project starts from a solid foundation rather than `fn main()`.
 
 ## Quick Start
 
-```bash
-git clone <this-repo> my-new-cli
-cd my-new-cli
-cargo build
+**Use as a template:**
 
+Click **"Use this template"** at the top of the [GitHub page](https://github.com/dat267/max), then clone your new repo:
+
+```bash
+git clone git@github.com:dat267/my-cli.git
+cd my-cli
+```
+
+**Clean up template artifacts:**
+
+```bash
+# Remove existing tags and release history
+git tag | xargs git tag -d
+git remote remove origin
+
+# Rename everywhere (replace "max" with your app name):
+#   - Cargo.toml        → package.name
+#   - src/main.rs       → DEFAULT_APP_NAME
+#   - src/cli.rs        → DEFAULT_APP_NAME
+#   - README.md         → title, install URLs
+#   - .github/workflows → BIN_NAME (via repo variable)
+```
+
+Then push to your own repository.
+
+**Build and run:**
+
+```bash
+cargo build
 cargo run -- greet
 cargo run -- config init
 cargo run -- config show
