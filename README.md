@@ -38,12 +38,29 @@ Every CLI I write needs the same boilerplate: config file resolution, environmen
 
 **Use as a template:**
 
+Click **"Use this template"** at the top of the [GitHub page](https://github.com/dat267/max), then clone your new repo:
+
 ```bash
-gh repo create my-cli --template dat267/max --clone
+git clone git@github.com:your-org/my-cli.git
 cd my-cli
 ```
 
-Or click **"Use this template"** at the top of the [GitHub page](https://github.com/dat267/max).
+**Clean up template artifacts:**
+
+```bash
+# Remove existing tags and release history
+git tag | xargs git tag -d
+git remote remove origin
+
+# Rename everywhere (replace "max" with your app name):
+#   - Cargo.toml        → package.name
+#   - src/main.rs       → DEFAULT_APP_NAME
+#   - src/cli.rs        → DEFAULT_APP_NAME
+#   - README.md         → title, install URLs
+#   - .github/workflows → BIN_NAME (via repo variable)
+```
+
+Then push to your own repository.
 
 **Build and run:**
 
