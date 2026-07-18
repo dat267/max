@@ -8,15 +8,15 @@ A scalable, opinionated base CLI application in Rust — the template I use for 
 
 ```bash
 # Linux x86_64
-curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-unknown-linux-gnu -o /usr/local/bin/max
-chmod +x /usr/local/bin/max
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-unknown-linux-gnu -o ~/.local/bin/max
+chmod +x ~/.local/bin/max
 
 # macOS arm64
-curl -sSfL https://github.com/dat267/max/releases/latest/download/max-aarch64-apple-darwin -o /usr/local/bin/max
-chmod +x /usr/local/bin/max
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-aarch64-apple-darwin -o ~/.local/bin/max
+chmod +x ~/.local/bin/max
 
 # Windows (PowerShell)
-curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-pc-windows-msvc.exe -o max.exe
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-pc-windows-msvc.exe -o "$env:USERPROFILE\max.exe"
 ```
 
 **From source**:
