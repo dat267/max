@@ -20,7 +20,8 @@ chmod +x ~/.local/bin/max
 
 **Windows (x86_64):**
 ```powershell
-curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-pc-windows-msvc.exe -o "$env:USERPROFILE\max.exe"
+mkdir -Force ~\.local\bin >$null
+curl -sSfL https://github.com/dat267/max/releases/latest/download/max-x86_64-pc-windows-msvc.exe -o ~\.local\bin\max.exe
 ```
 
 **From source**:
