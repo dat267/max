@@ -1,59 +1,92 @@
 use clap::{Parser, Subcommand};
-use crate::config_defaults;
-
-pub const DEFAULT_APP_NAME: &str = "max";
-pub const APP_DESCRIPTION: &str = "Internal workflows and troubleshooting utility";
 
 #[derive(Parser)]
 #[command(
-    name = DEFAULT_APP_NAME,
-    about = APP_DESCRIPTION,
+    name = "max",
+    about = "CLI project scaffolding tool",
     version,
 )]
 pub struct Cli {
-    #[arg(short, long, global = true, help = "Path to config file")]
-    pub config_file: Option<String>,
-
-    #[arg(short, long, global = true, help = "Enable verbose output")]
-    pub verbose: bool,
-
     #[command(subcommand)]
     pub command: Commands,
 }
 
 #[derive(Subcommand)]
 pub enum Commands {
+    #[command(about = "Initialize a new CLI project")]
+    Init(InitArgs),
+    #[command(about = "Manage commands in a project")]
+    Cmd(CmdArgs),
     #[command(about = "Manage application configuration", subcommand)]
     Config(ConfigCommands),
-
-    #[command(about = "Print a personalized greeting message")]
-    Greet(GreetArgs),
 }
 
 #[derive(clap::Args)]
-pub struct GreetArgs {
-    #[arg(long, help = "Admin token for authentication")]
-    pub admin_token: Option<String>,
-
-    pub name: Option<String>,
+pub struct InitArgs {
+    pub name: String,
 }
 
-config_defaults!(GreetArgs {
-    admin_token => (admin_token),
-});
+#[derive(clap::Args)]
+pub struct CmdArgs {
+    #[command(subcommand)]
+    pub command: CmdCommands,
+}
+
+#[derive(Subcommand)]
+pub enum CmdCommands {
+    #[command(about = "Add a new command")]
+    Add(CmdAddArgs),
+    #[command(about = "List all commands")]
+    Show,
+    #[command(about = "Edit a command struct")]
+    Edit(CmdEditArgs),
+}
+
+#[derive(clap::Args)]
+pub struct CmdAddArgs {
+    pub name: String,
+    #[arg(long, help = "Description for the command")]
+    pub desc: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct CmdEditArgs {
+    pub name: String,
+}
 
 #[derive(Subcommand)]
 pub enum ConfigCommands {
-    #[command(about = "Initialize a default config file")]
-    Init {
-        #[arg(short, long, help = "Overwrite existing config file")]
-        force: bool,
-    },
-    #[command(about = "Display the current configuration")]
-    Show {
-        #[arg(short, long, help = "Output as JSON")]
-        json: bool,
-    },
-    #[command(about = "Print the config file path")]
+    #[command(about = "Generate a default configuration file")]
+    Init(ConfigInitArgs),
+    #[command(about = "Set a config value")]
+    Set(ConfigSetArgs),
+    #[command(about = "Unset a config value")]
+    Unset(ConfigUnsetArgs),
+    #[command(about = "Show configuration file path")]
     Path,
+    #[command(about = "Print current configuration values")]
+    Show,
+    #[command(about = "Edit configuration file")]
+    Edit,
+}
+
+#[derive(clap::Args)]
+pub struct ConfigInitArgs {
+    #[arg(short, long, help = "Overwrite existing file")]
+    pub force: bool,
+}
+
+#[derive(clap::Args)]
+pub struct ConfigSetArgs {
+    #[arg(short, long, help = "Config file path")]
+    pub config_file: Option<String>,
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(clap::Args)]
+pub struct ConfigUnsetArgs {
+    #[arg(short, long, help = "Config file path")]
+    pub config_file: Option<String>,
+    pub key: String,
 }

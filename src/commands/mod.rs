@@ -1,2 +1,3 @@
+pub mod cmd;
 pub mod config;
-pub mod greet;
+pub mod init;

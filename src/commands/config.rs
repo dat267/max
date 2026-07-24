@@ -1,64 +1,98 @@
 use crate::cli::ConfigCommands;
 use crate::config::Config;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::Path;
 
-pub fn execute(
-    cmd: &ConfigCommands,
-    config: &Config,
-    config_path: &Path,
-) -> Result<()> {
+fn set_nested(m: &mut serde_json::Value, key: &str, value: serde_json::Value) {
+    if let Some((first, rest)) = key.split_once('.') {
+        let map = m.as_object_mut().unwrap();
+        if !map.contains_key(first) {
+            map.insert(first.to_string(), serde_json::Value::Object(serde_json::Map::new()));
+        }
+        if let Some(sub) = map.get_mut(first) {
+            set_nested(sub, rest, value);
+        }
+    } else if let Some(obj) = m.as_object_mut() {
+        obj.insert(key.to_string(), value);
+    }
+}
+
+fn unset_nested(m: &mut serde_json::Value, key: &str) {
+    if let Some((first, rest)) = key.split_once('.') {
+        if let Some(sub) = m.as_object_mut().and_then(|obj| obj.get_mut(first)) {
+            unset_nested(sub, rest);
+            if sub.as_object().is_some_and(|o| o.is_empty()) {
+                m.as_object_mut().map(|obj| obj.remove(first));
+            }
+        }
+    } else if let Some(obj) = m.as_object_mut() {
+        obj.remove(key);
+    }
+}
+
+fn read_config(path: &Path) -> Result<serde_json::Value> {
+    match std::fs::read_to_string(path) {
+        Ok(s) => Ok(serde_json::from_str(&s).unwrap_or(serde_json::Value::Object(serde_json::Map::new()))),
+        Err(_) => Ok(serde_json::Value::Object(serde_json::Map::new())),
+    }
+}
+
+fn write_config(path: &Path, value: &serde_json::Value) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let data = serde_json::to_string_pretty(value)?;
+    std::fs::write(path, data)?;
+    Ok(())
+}
+
+pub fn execute(cmd: ConfigCommands, _cfg: &Config, config_path: &Path) -> Result<()> {
     match cmd {
-        ConfigCommands::Init { force } => cmd_init(*force, config_path),
-        ConfigCommands::Show { json } => cmd_show(*json, config, config_path),
-        ConfigCommands::Path => cmd_path(config_path),
+        ConfigCommands::Init(init_args) => {
+            if config_path.exists() && !init_args.force {
+                anyhow::bail!("config file already exists at {}", config_path.display());
+            }
+            write_config(config_path, &serde_json::Value::Object(serde_json::Map::new()))?;
+            println!("Config file created at {}", config_path.display());
+        }
+        ConfigCommands::Set(set_args) => {
+            let path = set_args.config_file.as_ref().map(Path::new).unwrap_or(config_path);
+            let mut config = read_config(path)?;
+            set_nested(&mut config, &set_args.key, serde_json::Value::String(set_args.value.clone()));
+            write_config(path, &config)?;
+            println!("{} = {}", set_args.key, set_args.value);
+        }
+        ConfigCommands::Unset(unset_args) => {
+            let path = unset_args.config_file.as_ref().map(Path::new).unwrap_or(config_path);
+            let mut config = read_config(path)?;
+            unset_nested(&mut config, &unset_args.key);
+            write_config(path, &config)?;
+            println!("{}: unset", unset_args.key);
+        }
+        ConfigCommands::Path => {
+            if !config_path.exists() {
+                println!("{} (does not exist)", config_path.display());
+            } else {
+                println!("{}", config_path.display());
+            }
+        }
+        ConfigCommands::Show => {
+            let config = read_config(config_path)?;
+            println!("{}", serde_json::to_string_pretty(&config)?);
+        }
+        ConfigCommands::Edit => {
+            if let Some(parent) = config_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            if !config_path.exists() {
+                std::fs::write(config_path, b"{}\n")?;
+            }
+            let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
+            let status = std::process::Command::new(&editor).arg(config_path).status()?;
+            if !status.success() {
+                anyhow::bail!("editor exited with error");
+            }
+        }
     }
-}
-
-fn cmd_init(force: bool, config_path: &Path) -> Result<()> {
-    if config_path.exists() && !force {
-        eprintln!("Config file already exists at {}", config_path.display());
-        eprintln!("Use --force to overwrite.");
-        return Ok(());
-    }
-
-    let default_config = Config::default();
-    let json = serde_json::to_string_pretty(&default_config)
-        .context("failed to serialize default config")?;
-
-    if let Some(parent) = config_path.parent() {
-        std::fs::create_dir_all(parent)
-            .context("failed to create config directory")?;
-    }
-
-    std::fs::write(config_path, &json)
-        .context("failed to write config file")?;
-
-    println!("Initialized config file at {}", config_path.display());
-    Ok(())
-}
-
-fn cmd_show(json: bool, config: &Config, config_path: &Path) -> Result<()> {
-    if !config_path.exists() {
-        eprintln!("Config file not found at {}", config_path.display());
-        eprintln!("Run 'init' to create a default config.");
-        return Ok(());
-    }
-
-    if json {
-        let output = serde_json::to_string_pretty(config)
-            .context("failed to serialize config")?;
-        println!("{}", output);
-    } else {
-        let content = std::fs::read_to_string(config_path)
-            .context("failed to read config file")?;
-        print!("{}", content);
-    }
-
-    Ok(())
-}
-
-fn cmd_path(config_path: &Path) -> Result<()> {
-    println!("{}", config_path.display());
     Ok(())
 }
