@@ -73,8 +73,9 @@ fn run_command(cli: Cli, cfg: &Config, config_path: &Path) -> Result<()> {
             .context("config command failed")?,
         Commands::Greet(mut args) => {
             args.apply_config_defaults(cfg);
-            commands::greet::execute(&args, cfg).context("greet command failed")?
+            commands::greet::execute(&args, cfg, config_path).context("greet command failed")?
         }
+        // __CMD_DISPATCH_MARKER__
     }
     Ok(())
 }

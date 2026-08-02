@@ -3,36 +3,50 @@ use crate::config::Config;
 use anyhow::Result;
 use std::path::Path;
 
-fn set_nested(m: &mut serde_json::Value, key: &str, value: serde_json::Value) {
+fn set_nested(m: &mut serde_json::Value, key: &str, value: serde_json::Value) -> Result<()> {
     if let Some((first, rest)) = key.split_once('.') {
-        let map = m.as_object_mut().unwrap();
+        let map = m.as_object_mut().ok_or_else(|| anyhow::anyhow!("cannot set key {key:?}: expected object"))?;
         if !map.contains_key(first) {
             map.insert(first.to_string(), serde_json::Value::Object(serde_json::Map::new()));
         }
         if let Some(sub) = map.get_mut(first) {
-            set_nested(sub, rest, value);
+            set_nested(sub, rest, value)?;
         }
+        Ok(())
     } else if let Some(obj) = m.as_object_mut() {
         obj.insert(key.to_string(), value);
+        Ok(())
+    } else {
+        anyhow::bail!("cannot set key {key:?}: root value is not an object");
     }
 }
 
-fn unset_nested(m: &mut serde_json::Value, key: &str) {
+fn unset_nested(m: &mut serde_json::Value, key: &str) -> Result<()> {
     if let Some((first, rest)) = key.split_once('.') {
         if let Some(sub) = m.as_object_mut().and_then(|obj| obj.get_mut(first)) {
-            unset_nested(sub, rest);
+            unset_nested(sub, rest)?;
             if sub.as_object().is_some_and(|o| o.is_empty()) {
                 m.as_object_mut().map(|obj| obj.remove(first));
             }
         }
+        Ok(())
     } else if let Some(obj) = m.as_object_mut() {
         obj.remove(key);
+        Ok(())
+    } else {
+        Ok(())
     }
 }
 
 fn read_config(path: &Path) -> Result<serde_json::Value> {
     match std::fs::read_to_string(path) {
-        Ok(s) => Ok(serde_json::from_str(&s).unwrap_or(serde_json::Value::Object(serde_json::Map::new()))),
+        Ok(s) => match serde_json::from_str(&s) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                eprintln!("warning: failed to parse {}: {}", path.display(), e);
+                Ok(serde_json::Value::Object(serde_json::Map::new()))
+            }
+        },
         Err(_) => Ok(serde_json::Value::Object(serde_json::Map::new())),
     }
 }
@@ -58,14 +72,14 @@ pub fn execute(cmd: ConfigCommands, _cfg: &Config, config_path: &Path) -> Result
         ConfigCommands::Set(set_args) => {
             let path = set_args.config_file.as_ref().map(Path::new).unwrap_or(config_path);
             let mut config = read_config(path)?;
-            set_nested(&mut config, &set_args.key, serde_json::Value::String(set_args.value.clone()));
+            set_nested(&mut config, &set_args.key, serde_json::Value::String(set_args.value.clone()))?;
             write_config(path, &config)?;
             println!("{} = {}", set_args.key, set_args.value);
         }
         ConfigCommands::Unset(unset_args) => {
             let path = unset_args.config_file.as_ref().map(Path::new).unwrap_or(config_path);
             let mut config = read_config(path)?;
-            unset_nested(&mut config, &unset_args.key);
+            unset_nested(&mut config, &unset_args.key)?;
             write_config(path, &config)?;
             println!("{}: unset", unset_args.key);
         }
@@ -77,8 +91,14 @@ pub fn execute(cmd: ConfigCommands, _cfg: &Config, config_path: &Path) -> Result
             }
         }
         ConfigCommands::Show => {
-            let config = read_config(config_path)?;
-            println!("{}", serde_json::to_string_pretty(&config)?);
+            let path = config_path;
+            if !path.exists() {
+                eprintln!("warning: config file not found at {}", path.display());
+                println!("{{}}");
+            } else {
+                let config = read_config(path)?;
+                println!("{}", serde_json::to_string_pretty(&config)?);
+            }
         }
         ConfigCommands::Edit => {
             if let Some(parent) = config_path.parent() {

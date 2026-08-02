@@ -19,6 +19,7 @@ pub enum Commands {
     Cmd(CmdArgs),
     #[command(about = "Manage application configuration", subcommand)]
     Config(ConfigCommands),
+    // __CMD_ENUM_MARKER__
 }
 
 #[derive(clap::Args)]

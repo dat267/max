@@ -12,23 +12,38 @@ pub fn execute(args: CmdArgs, _cfg: &Config, _config_path: &Path) -> Result<()> 
     }
 }
 
+fn validate_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        anyhow::bail!("command name is required");
+    }
+    if name.contains("..") || name.contains('/') || name.contains('\\') || name.contains('\0') {
+        anyhow::bail!("invalid command name: {name:?}");
+    }
+    Ok(())
+}
+
 fn execute_add(args: CmdAddArgs) -> Result<()> {
     if !Path::new("src/cli.rs").exists() {
         anyhow::bail!("no src/cli.rs found (run 'max init' first)");
     }
     if !Path::new("src/config.rs").exists() {
-        anyhow::bail!("no src/config.rs found — 'cmd add' must be run from a project created by 'max init', not from the max tool itself");
+        anyhow::bail!("no src/config.rs found — run 'max init' first or check you are in a project directory");
     }
+
+    validate_name(&args.name)?;
 
     let segments: Vec<&str> = args.name.split('.').collect();
-    if segments.is_empty() || segments[0].is_empty() {
-        anyhow::bail!("command name is required");
+    if segments.iter().any(|s| s.is_empty()) {
+        anyhow::bail!("command name contains empty segments (e.g. consecutive dots)");
     }
 
-    let desc = args.desc.unwrap_or_else(|| format!("{} command", segments.last().unwrap()));
     let leaf = segments.last().unwrap();
     let struct_name = pascal_case(leaf);
     let mod_name = leaf.to_lowercase();
+
+    if !is_valid_rust_ident(&struct_name) || struct_name.is_empty() {
+        anyhow::bail!("command name {leaf:?} does not produce a valid Rust identifier");
+    }
 
     // Create command handler file
     let handler_path = format!("src/commands/{mod_name}.rs");
@@ -76,39 +91,21 @@ pub struct {struct_name} {{
     // Re-read file after struct insertion
     let cli_content = fs::read_to_string(cli_path)?;
 
-    // Add enum variant to Commands enum - find its closing brace
+    // Add enum variant to Commands enum via sentinel marker
+    let desc = args.desc.unwrap_or_else(|| format!("{} command", leaf));
     let variant = format!(
         "    #[command(about = \"{desc}\")]
     {struct_name}({struct_name}),
 ",
     );
-    // Find the closing } of the Commands enum and insert before it
-    if let Some(enum_start) = cli_content.find("pub enum Commands") {
-        let rest = &cli_content[enum_start..];
-        let mut depth = 0;
-        let mut insert_at = None;
-        for (i, c) in rest.char_indices() {
-            match c {
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        insert_at = Some(enum_start + i);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        if let Some(pos) = insert_at {
-            let (before, after) = cli_content.split_at(pos);
-            let new_content = format!("{}{}{}", before.trim_end(), "\n".to_string() + variant.trim_end() + "\n", after);
-            fs::write(cli_path, new_content)?;
-            println!("Updated {cli_path} with {struct_name} command");
-        }
+    if let Some(pos) = cli_content.find("// __CMD_ENUM_MARKER__") {
+        let (before, after) = cli_content.split_at(pos);
+        let new_content = format!("{}{}{}", before, variant.trim_end().to_owned() + "\n", after.trim_start());
+        fs::write(cli_path, new_content)?;
+        println!("Updated {cli_path} with {struct_name} command");
     }
 
-    // Add match arm to run_command in main.rs
+    // Add match arm to run_command via sentinel marker
     let main_path = "src/main.rs";
     if Path::new(main_path).exists() {
         let main_content = fs::read_to_string(main_path)?;
@@ -120,11 +117,9 @@ pub struct {struct_name} {{
         }}
 ",
         );
-        // Insert before the match's closing brace
-        if let Some(pos) = main_content.rfind("\n    }\n    Ok(())\n}") {
-            let insert_at = pos + 1;
-            let (before, after) = main_content.split_at(insert_at);
-            let new_content = format!("{}{}{}", before, arm, after);
+        if let Some(pos) = main_content.find("// __CMD_DISPATCH_MARKER__") {
+            let (before, after) = main_content.split_at(pos);
+            let new_content = format!("{}{}{}", before, arm.trim_end().to_owned() + "\n", after.trim_start());
             fs::write(main_path, new_content)?;
             println!("Updated {main_path}");
         }
@@ -141,7 +136,7 @@ fn execute_show() -> Result<()> {
     for entry in entries {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".rs") && name != "mod.rs" && name != "cmd.rs" && name != "init.rs" && name != "config.rs" {
+        if name.ends_with(".rs") && name != "mod.rs" && name != "greet.rs" && name != "config.rs" {
             println!("  {}", name.trim_end_matches(".rs"));
             count += 1;
         }
@@ -153,9 +148,17 @@ fn execute_show() -> Result<()> {
 }
 
 fn execute_edit(args: CmdEditArgs) -> Result<()> {
-    let path = format!("src/commands/{}.rs", args.name.to_lowercase());
+    validate_name(&args.name)?;
+
+    let segments: Vec<&str> = args.name.split('.').collect();
+    let leaf = segments.last().unwrap();
+    if leaf.is_empty() {
+        anyhow::bail!("invalid command name");
+    }
+
+    let path = format!("src/commands/{}.rs", leaf.to_lowercase());
     if !Path::new(&path).exists() {
-        anyhow::bail!("command {:?} not found in src/commands/", args.name);
+        anyhow::bail!("command {leaf:?} not found in src/commands/");
     }
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
     let status = std::process::Command::new(&editor).arg(&path).status()?;
@@ -176,4 +179,15 @@ fn pascal_case(s: &str) -> String {
             }
         })
         .collect()
+}
+
+fn is_valid_rust_ident(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    let first = s.chars().next().unwrap();
+    if !first.is_ascii_alphabetic() && first != '_' {
+        return false;
+    }
+    s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }

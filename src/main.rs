@@ -24,6 +24,7 @@ fn run_command(cli: Cli, cfg: &Config, config_path: &Path) -> Result<()> {
             .context("cmd command failed")?,
         Commands::Config(cmd) => commands::config::execute(cmd, cfg, config_path)
             .context("config command failed")?,
+        // __CMD_DISPATCH_MARKER__
     }
     Ok(())
 }

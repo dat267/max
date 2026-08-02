@@ -1,8 +1,9 @@
 use crate::cli::GreetArgs;
 use crate::config::Config;
 use anyhow::Result;
+use std::path::Path;
 
-pub fn execute(args: &GreetArgs, config: &Config) -> Result<()> {
+pub fn execute(args: &GreetArgs, config: &Config, _config_path: &Path) -> Result<()> {
     let name = args
         .name
         .as_deref()

@@ -23,8 +23,15 @@ const TEMPLATES: &[Template] = &[
 
 pub fn execute(args: InitArgs, _cfg: &Config, _config_path: &Path) -> Result<()> {
     let dir = &args.name;
-    let path = Path::new(dir);
 
+    if dir.is_empty() {
+        anyhow::bail!("project name is required");
+    }
+    if dir.contains('/') || dir.contains('\\') || dir.contains("..") || dir.contains('\0') {
+        anyhow::bail!("invalid project name: {dir:?}");
+    }
+
+    let path = Path::new(dir);
     if path.exists() {
         anyhow::bail!("directory {dir:?} already exists");
     }

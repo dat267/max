@@ -26,6 +26,7 @@ pub enum Commands {
 
     #[command(about = "Print a personalized greeting")]
     Greet(GreetArgs),
+    // __CMD_ENUM_MARKER__
 }
 
 #[derive(clap::Args)]
