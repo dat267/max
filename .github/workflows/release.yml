@@ -2,15 +2,13 @@ name: Release
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    tags: ['*']
 
 permissions:
   contents: write
 
 env:
   BIN_NAME:      ${{ vars.BIN_NAME || github.event.repository.name }}
-  KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '3' }}
 
 jobs:
   build:
@@ -79,32 +77,26 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
 
-      - name: Compute release tag
+      - name: Validate tag matches crate version
         id: meta
         run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          echo "tag=${BIN_NAME}/${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "name=Release ${BIN_NAME}/${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          VERSION=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          EXPECTED="v${VERSION}"
+          if [ "${GITHUB_REF_NAME}" != "${EXPECTED}" ]; then
+            echo "::error::pushed tag '${GITHUB_REF_NAME}' does not match crate version tag '${EXPECTED}' (tag must equal v<version> from Cargo.toml)"
+            exit 1
+          fi
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "name=Release ${BIN_NAME} ${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
 
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.name }}
           files: ${{ env.BIN_NAME }}-*
-
-      - name: Prune old releases
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          KEEP=${{ env.KEEP_RELEASES }}
-          gh release list --repo "$REPO" --json tagName --jq '.[].tagName' --limit 100 \
-            | tail -n +$((KEEP + 1)) \
-            | while read tag; do
-                gh release delete "$tag" --repo "$REPO" --yes
-                gh api -X DELETE "repos/$REPO/git/refs/tags/$tag"
-              done
