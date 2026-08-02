@@ -4,11 +4,7 @@ use anyhow::Result;
 use std::path::Path;
 
 pub fn execute(args: &GreetArgs, config: &Config, _config_path: &Path) -> Result<()> {
-    let name = args
-        .name
-        .as_deref()
-        .or(args.admin_token.as_deref())
-        .unwrap_or("World");
+    let name = args.name.as_deref().unwrap_or("World");
 
     let greeting = if config.debug {
         format!("[debug] Hello, {}!", name)

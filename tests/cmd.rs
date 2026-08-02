@@ -117,3 +117,57 @@ fn cmd_add_invalid_name_errors() {
         .assert()
         .failure();
 }
+
+#[test]
+fn cmd_show_lists_builtin_and_added_commands() {
+    let tmp = tempfile::tempdir().unwrap();
+    init_project(tmp.path(), "mycli");
+    let project = tmp.path().join("mycli");
+
+    let stdout = Command::cargo_bin("max")
+        .unwrap()
+        .current_dir(&project)
+        .args(["cmd", "show"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let show = String::from_utf8_lossy(&stdout);
+    assert!(
+        show.contains("greet"),
+        "built-in greet should be listed:\n{show}"
+    );
+    assert!(
+        show.contains("config"),
+        "built-in config should be listed:\n{show}"
+    );
+
+    Command::cargo_bin("max")
+        .unwrap()
+        .current_dir(&project)
+        .args(["cmd", "add", "hello"])
+        .assert()
+        .success();
+
+    let stdout = Command::cargo_bin("max")
+        .unwrap()
+        .current_dir(&project)
+        .args(["cmd", "show"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let show = String::from_utf8_lossy(&stdout);
+    assert!(
+        show.contains("hello"),
+        "added command should be listed:\n{show}"
+    );
+    assert!(
+        show.contains("greet"),
+        "built-in greet should still be listed:\n{show}"
+    );
+}

@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+
 use crate::config_defaults;
 
 pub const DEFAULT_APP_NAME: &str = "{{project_name}}";
@@ -49,10 +50,7 @@ pub enum ConfigCommands {
         force: bool,
     },
     #[command(about = "Display the current configuration")]
-    Show {
-        #[arg(short, long, help = "Output as JSON")]
-        json: bool,
-    },
+    Show,
     #[command(about = "Print the config file path")]
     Path,
 }

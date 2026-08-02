@@ -18,9 +18,8 @@ pub fn execute(cmd: &ConfigCommands, _cfg: &Config, config_path: &Path) -> Resul
             std::fs::write(config_path, json)?;
             println!("config file created at {}", config_path.display());
         }
-        ConfigCommands::Show { json: _ } => {
-            let content = std::fs::read_to_string(config_path)
-                .unwrap_or_else(|_| "{}".to_string());
+        ConfigCommands::Show => {
+            let content = std::fs::read_to_string(config_path).unwrap_or_else(|_| "{}".to_string());
             println!("{}", content);
         }
         ConfigCommands::Path => {

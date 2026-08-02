@@ -101,18 +101,23 @@ fn execute_add(args: CmdAddArgs) -> Result<()> {
 
 fn execute_show() -> Result<()> {
     let entries = fs::read_dir("src/commands")?;
+    let mut commands: Vec<String> = entries
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            (name.ends_with(".rs") && name != "mod.rs")
+                .then(|| name.trim_end_matches(".rs").to_string())
+        })
+        .collect();
+    commands.sort();
+
     println!("Commands:");
-    let mut count = 0;
-    for entry in entries {
-        let entry = entry?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".rs") && name != "mod.rs" && name != "greet.rs" && name != "config.rs" {
-            println!("  {}", name.trim_end_matches(".rs"));
-            count += 1;
-        }
-    }
-    if count == 0 {
+    if commands.is_empty() {
         println!("  (no commands yet)");
+    } else {
+        for name in commands {
+            println!("  {name}");
+        }
     }
     Ok(())
 }
@@ -161,17 +166,33 @@ pub struct {struct_name} {{
 
 fn build_enum_variant(struct_name: &str, desc: &str) -> String {
     format!(
-        "    #[command(about = \"{desc}\")]
+        "    #[command(about = \"{}\")]
     {struct_name}({struct_name}),
 ",
+        escape_rust_string(desc),
     )
+}
+
+fn escape_rust_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c.is_control() => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 fn build_dispatch_arm(mod_name: &str, struct_name: &str) -> String {
     format!(
         "        Commands::{struct_name}(args) => {{
-            commands::{mod_name}::execute(&args, cfg, config_path)
-                .context(\"{mod_name} command failed\")?
+            commands::{mod_name}::execute(&args, cfg, config_path).context(\"{mod_name} command failed\")?
         }}
 ",
     )
@@ -182,11 +203,13 @@ fn insert_before_marker(content: &str, marker: &str, insertion: &str) -> Result<
         anyhow::anyhow!("codegen marker {marker:?} not found in generated project files")
     })?;
     let (before, after) = content.split_at(pos);
+    let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+    let indent = &before[line_start..];
+    let base = before.trim_end();
+    let sep = if base.is_empty() { "" } else { "\n" };
     Ok(format!(
-        "{}{}\n{}",
-        before,
+        "{base}{sep}{}\n{indent}{after}",
         insertion.trim_end(),
-        after.trim_start()
     ))
 }
 
@@ -195,7 +218,25 @@ fn insert_enum_variant(cli_content: &str, variant_source: &str) -> Result<String
 }
 
 fn insert_dispatch_arm(main_content: &str, arm_source: &str) -> Result<String> {
-    insert_before_marker(main_content, DISPATCH_MARKER, arm_source)
+    insert_after_marker(main_content, DISPATCH_MARKER, arm_source)
+}
+
+fn insert_after_marker(content: &str, marker: &str, insertion: &str) -> Result<String> {
+    let pos = content.find(marker).ok_or_else(|| {
+        anyhow::anyhow!("codegen marker {marker:?} not found in generated project files")
+    })?;
+    let rest = &content[pos..];
+    let line_end = match rest.find('\n') {
+        Some(i) => pos + i,
+        None => content.len(),
+    };
+    let (before, after) = if line_end < content.len() {
+        content.split_at(line_end + 1)
+    } else {
+        content.split_at(line_end)
+    };
+    let sep = if before.ends_with('\n') { "" } else { "\n" };
+    Ok(format!("{before}{sep}{}\n{after}", insertion.trim_end()))
 }
 
 fn pascal_case(s: &str) -> String {
@@ -302,20 +343,56 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_arm_inserted_before_marker() {
-        let content = "match cli.command {\n    // __CMD_DISPATCH_MARKER__\n}\n";
+    fn dispatch_arm_inserted_after_marker() {
+        let content = "match cli.command {\n        // __CMD_DISPATCH_MARKER__\n        Commands::Config(cmd) => {\n            commands::config::execute(&cmd, cfg, config_path).context(\"config command failed\")?\n        }\n    }\n";
         let arm = build_dispatch_arm("foo", "FooCmd");
         let out = insert_dispatch_arm(content, &arm).unwrap();
         assert!(out.contains("Commands::FooCmd(args)"));
         assert!(out.contains("commands::foo::execute"));
         assert!(out.contains("// __CMD_DISPATCH_MARKER__"));
+        assert!(
+            out.contains(
+                "        // __CMD_DISPATCH_MARKER__\n        Commands::FooCmd(args) => {\n            commands::foo::execute(&args, cfg, config_path).context(\"foo command failed\")?\n        }\n"
+            ),
+            "unexpected output:\n{out}"
+        );
     }
 
     #[test]
-    fn enum_insert_errors_when_marker_missing() {
-        let content = "enum Commands {\n    Init(InitArgs),\n}\n";
+    fn dispatch_arm_uses_single_line_body() {
+        let arm = build_dispatch_arm("foo", "FooCmd");
+        assert!(
+            arm.contains(
+                "        Commands::FooCmd(args) => {\n            commands::foo::execute(&args, cfg, config_path).context(\"foo command failed\")?\n        }\n"
+            ),
+            "unexpected output:\n{arm}"
+        );
+    }
+
+    #[test]
+    fn enum_insert_preserves_marker_indentation() {
+        let content = "enum Commands {\n    Greet(GreetArgs),\n    // __CMD_ENUM_MARKER__\n}\n";
         let variant = build_enum_variant("FooCmd", "foo command");
-        assert!(insert_enum_variant(content, &variant).is_err());
+        let out = insert_enum_variant(content, &variant).unwrap();
+        assert!(
+            out.contains(
+                "    Greet(GreetArgs),\n    #[command(about = \"foo command\")]\n    FooCmd(FooCmd),\n    // __CMD_ENUM_MARKER__\n}\n"
+            ),
+            "unexpected output:\n{out}"
+        );
+    }
+
+    #[test]
+    fn dispatch_insert_preserves_marker_indentation() {
+        let content = "match cli.command {\n        // __CMD_DISPATCH_MARKER__\n    }\n";
+        let arm = build_dispatch_arm("foo", "FooCmd");
+        let out = insert_dispatch_arm(content, &arm).unwrap();
+        assert!(
+            out.contains(
+                "        // __CMD_DISPATCH_MARKER__\n        Commands::FooCmd(args) => {\n            commands::foo::execute(&args, cfg, config_path).context(\"foo command failed\")?\n        }\n    }\n"
+            ),
+            "unexpected output:\n{out}"
+        );
     }
 
     #[test]
@@ -323,5 +400,58 @@ mod tests {
         let content = "match cli.command {\n}\n";
         let arm = build_dispatch_arm("foo", "FooCmd");
         assert!(insert_dispatch_arm(content, &arm).is_err());
+    }
+
+    #[test]
+    fn dispatch_insert_marker_as_last_line_without_newline() {
+        let content = "match cli.command {\n        // __CMD_DISPATCH_MARKER__";
+        let arm = build_dispatch_arm("foo", "FooCmd");
+        let out = insert_dispatch_arm(content, &arm).unwrap();
+        assert!(
+            out.contains("        // __CMD_DISPATCH_MARKER__\n        Commands::FooCmd(args)"),
+            "arm must not merge onto the marker line:\n{out}"
+        );
+    }
+
+    #[test]
+    fn enum_insert_marker_on_first_line_no_leading_blank() {
+        let content = "// __CMD_ENUM_MARKER__\n}\n";
+        let variant = build_enum_variant("FooCmd", "foo command");
+        let out = insert_enum_variant(content, &variant).unwrap();
+        assert!(
+            out.starts_with(
+                "    #[command(about = \"foo command\")]\n    FooCmd(FooCmd),\n// __CMD_ENUM_MARKER__\n}\n"
+            ),
+            "no leading blank line expected:\n{out}"
+        );
+    }
+
+    #[test]
+    fn enum_insert_marker_as_last_line_without_newline() {
+        let content = "enum Commands {\n    // __CMD_ENUM_MARKER__";
+        let variant = build_enum_variant("FooCmd", "foo command");
+        let out = insert_enum_variant(content, &variant).unwrap();
+        assert!(
+            out.contains(
+                "    #[command(about = \"foo command\")]\n    FooCmd(FooCmd),\n    // __CMD_ENUM_MARKER__"
+            ),
+            "marker must be preserved on its own line:\n{out}"
+        );
+    }
+
+    #[test]
+    fn enum_variant_escapes_description() {
+        let src = build_enum_variant("FooCmd", "say \"hi\" and \\ stuff\non two lines");
+        assert!(
+            src.contains("about = \"say \\\"hi\\\" and \\\\ stuff\\non two lines\""),
+            "unexpected output:\n{src}"
+        );
+    }
+
+    #[test]
+    fn enum_insert_errors_when_marker_missing() {
+        let content = "enum Commands {\n    Init(InitArgs),\n}\n";
+        let variant = build_enum_variant("FooCmd", "foo command");
+        assert!(insert_enum_variant(content, &variant).is_err());
     }
 }

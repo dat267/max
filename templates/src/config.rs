@@ -66,19 +66,24 @@ pub fn apply_env_overrides(app_name: &str, config: &mut Config) {
     let prefix = format!("{}_", app_name.to_uppercase());
 
     let current = serde_json::to_value(&*config).unwrap_or(serde_json::Value::Null);
-    let mut merged = current.clone();
     let mut leaf_keys = BTreeSet::new();
     leaf_keys_recursive(&current, "", &mut leaf_keys);
 
     for key in &leaf_keys {
         let env_key = format!("{}{}", prefix, key.to_uppercase().replace('-', "_"));
-        if let Ok(val) = std::env::var(&env_key) {
-            set_json_path(&mut merged, key, env_string_to_value(&val));
+        let Ok(val) = std::env::var(&env_key) else {
+            continue;
+        };
+        let mut candidate = serde_json::to_value(&*config).unwrap_or(serde_json::Value::Null);
+        set_json_path(&mut candidate, key, env_string_to_value(&val));
+        match serde_json::from_value::<Config>(candidate) {
+            Ok(updated) => *config = updated,
+            Err(_) => {
+                eprintln!(
+                    "warning: ignoring env var {env_key}={val:?}: incompatible with config field {key:?}"
+                );
+            }
         }
-    }
-
-    if let Ok(updated) = serde_json::from_value(merged) {
-        *config = updated;
     }
 }
 
@@ -122,8 +127,8 @@ fn set_json_path(value: &mut serde_json::Value, path: &str, val: serde_json::Val
 
 fn env_string_to_value(val: &str) -> serde_json::Value {
     match val {
-        "true" | "yes" | "1" => return serde_json::Value::Bool(true),
-        "false" | "no" | "0" => return serde_json::Value::Bool(false),
+        "true" | "yes" => return serde_json::Value::Bool(true),
+        "false" | "no" => return serde_json::Value::Bool(false),
         _ => {}
     }
     if let Ok(n) = val.parse::<i64>() {
@@ -168,19 +173,34 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn clear_app_env(app: &str) {
+        let prefix = format!("{}_", app.to_uppercase());
+        let keys: Vec<String> = std::env::vars()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(k, _)| k)
+            .collect();
+        for k in keys {
+            // SAFETY: serialized by ENV_LOCK.
+            unsafe { std::env::remove_var(k) };
+        }
+    }
+
     #[test]
     fn env_string_to_value_parses_booleans() {
         assert_eq!(env_string_to_value("true"), json!(true));
         assert_eq!(env_string_to_value("yes"), json!(true));
-        assert_eq!(env_string_to_value("1"), json!(true));
         assert_eq!(env_string_to_value("false"), json!(false));
-        assert_eq!(env_string_to_value("0"), json!(false));
+        assert_eq!(env_string_to_value("no"), json!(false));
     }
 
     #[test]
     fn env_string_to_value_parses_numbers() {
         assert_eq!(env_string_to_value("42"), json!(42));
         assert_eq!(env_string_to_value("3.14"), json!(3.14));
+        assert_eq!(env_string_to_value("1"), json!(1));
+        assert_eq!(env_string_to_value("0"), json!(0));
     }
 
     #[test]
@@ -215,11 +235,38 @@ mod tests {
 
     #[test]
     fn apply_env_overrides_sets_matching_env() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clear_app_env("mycli");
         let mut config = Config::default();
-        // SAFETY: single-threaded test; no concurrent readers of this var.
         unsafe { std::env::set_var("MYCLI_CORE_TIMEOUT", "9m") };
         apply_env_overrides("mycli", &mut config);
-        unsafe { std::env::remove_var("MYCLI_CORE_TIMEOUT") };
+        clear_app_env("mycli");
         assert_eq!(config.core.timeout, "9m");
+    }
+
+    #[test]
+    fn apply_env_overrides_sets_numeric_field() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clear_app_env("mycli");
+        let mut config = Config::default();
+        unsafe { std::env::set_var("MYCLI_CORE_RETRIES", "5") };
+        apply_env_overrides("mycli", &mut config);
+        clear_app_env("mycli");
+        assert_eq!(config.core.retries, 5);
+    }
+
+    #[test]
+    fn apply_env_overrides_bad_value_does_not_drop_others() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clear_app_env("mycli");
+        let mut config = Config::default();
+        unsafe {
+            std::env::set_var("MYCLI_CORE_TIMEOUT", "9m");
+            std::env::set_var("MYCLI_CORE_RETRIES", "not-a-number");
+        }
+        apply_env_overrides("mycli", &mut config);
+        clear_app_env("mycli");
+        assert_eq!(config.core.timeout, "9m");
+        assert_eq!(config.core.retries, 3);
     }
 }

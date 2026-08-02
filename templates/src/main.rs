@@ -69,13 +69,14 @@ fn resolve_config_path(app_name: &str) -> PathBuf {
 
 fn run_command(cli: Cli, cfg: &Config, config_path: &Path) -> Result<()> {
     match cli.command {
-        Commands::Config(cmd) => commands::config::execute(&cmd, cfg, config_path)
-            .context("config command failed")?,
+        // __CMD_DISPATCH_MARKER__
+        Commands::Config(cmd) => {
+            commands::config::execute(&cmd, cfg, config_path).context("config command failed")?
+        }
         Commands::Greet(mut args) => {
             args.apply_config_defaults(cfg);
             commands::greet::execute(&args, cfg, config_path).context("greet command failed")?
         }
-        // __CMD_DISPATCH_MARKER__
     }
     Ok(())
 }

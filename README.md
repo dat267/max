@@ -64,7 +64,7 @@ A generated project includes:
 - **Greet** example command with `--admin-token` flag
 - **Config** commands (`init`, `show`, `path`)
 - `--verbose` root-level flag
-- Config file resolution (`$APP_CONFIG_FILE` env > local `app.json` > XDG config dir)
+- Config file resolution (`$<APP>_CONFIG_FILE` env > local `<app>.json` > XDG config dir)
 - Env var overrides (`APP_KEY=value`)
 - `config_defaults!` macro — type-safe auto-wiring of config values into CLI args
 
