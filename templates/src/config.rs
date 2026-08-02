@@ -162,3 +162,64 @@ macro_rules! config_defaults {
         }
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn env_string_to_value_parses_booleans() {
+        assert_eq!(env_string_to_value("true"), json!(true));
+        assert_eq!(env_string_to_value("yes"), json!(true));
+        assert_eq!(env_string_to_value("1"), json!(true));
+        assert_eq!(env_string_to_value("false"), json!(false));
+        assert_eq!(env_string_to_value("0"), json!(false));
+    }
+
+    #[test]
+    fn env_string_to_value_parses_numbers() {
+        assert_eq!(env_string_to_value("42"), json!(42));
+        assert_eq!(env_string_to_value("3.14"), json!(3.14));
+    }
+
+    #[test]
+    fn env_string_to_value_falls_back_to_string() {
+        assert_eq!(env_string_to_value("hello"), json!("hello"));
+        assert_eq!(env_string_to_value("2m"), json!("2m"));
+    }
+
+    #[test]
+    fn set_json_path_creates_nested_objects() {
+        let mut v = json!({});
+        set_json_path(&mut v, "core-timeout", json!("5m"));
+        assert_eq!(v, json!({"core": {"timeout": "5m"}}));
+    }
+
+    #[test]
+    fn set_json_path_overwrites_existing() {
+        let mut v = json!({"core": {"timeout": "2m"}});
+        set_json_path(&mut v, "core-timeout", json!("5m"));
+        assert_eq!(v, json!({"core": {"timeout": "5m"}}));
+    }
+
+    #[test]
+    fn leaf_keys_collects_nested_paths() {
+        let v = json!({"admin-token": "x", "core": {"timeout": "2m", "retries": 3}});
+        let mut keys = BTreeSet::new();
+        leaf_keys_recursive(&v, "", &mut keys);
+        assert!(keys.contains("admin-token"));
+        assert!(keys.contains("core-timeout"));
+        assert!(keys.contains("core-retries"));
+    }
+
+    #[test]
+    fn apply_env_overrides_sets_matching_env() {
+        let mut config = Config::default();
+        // SAFETY: single-threaded test; no concurrent readers of this var.
+        unsafe { std::env::set_var("MYCLI_CORE_TIMEOUT", "9m") };
+        apply_env_overrides("mycli", &mut config);
+        unsafe { std::env::remove_var("MYCLI_CORE_TIMEOUT") };
+        assert_eq!(config.core.timeout, "9m");
+    }
+}
