@@ -36,14 +36,9 @@ cd mycli && cargo run -- greet
 # → Hello, World!
 
 # Add a command
-max cmd add greet
-cargo run -- greet Alice
-# → Hello, Alice!
-
-# Nested commands (dot-separated)
-max cmd add admin.users.list
-cargo run -- admin users list
-# → TODO: implement ListCmd command
+max cmd add hello
+cargo run -- hello
+# → TODO: implement Hello command
 
 # Config commands come built-in
 cargo run -- config init
@@ -66,8 +61,8 @@ mycli/
 ```
 
 A generated project includes:
-- **GreetCmd** example command with `--admin-token` flag
-- **ConfigCmd** commands (`init`, `show`, `path`)
+- **Greet** example command with `--admin-token` flag
+- **Config** commands (`init`, `show`, `path`)
 - `--verbose` root-level flag
 - Config file resolution (`$APP_CONFIG_FILE` env > local `app.json` > XDG config dir)
 - Env var overrides (`APP_KEY=value`)
@@ -76,10 +71,14 @@ A generated project includes:
 ## Adding commands
 
 ```bash
-max cmd add <name>        # add a leaf command
+max cmd add <name>        # add a command
 max cmd add --desc "..."  # with description
-max cmd add admin.users   # nested command (creates admin with users subcommand)
+max cmd add admin.users   # flat command named after the leaf segment (users)
 ```
+
+Command names may use dot-separated paths, but `max` only uses the last
+segment: `max cmd add admin.users` generates a single flat `Users` command,
+not nested subcommands. Every segment must form a valid Rust identifier.
 
 ## Config set
 
