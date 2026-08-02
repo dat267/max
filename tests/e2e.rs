@@ -32,6 +32,32 @@ fn end_to_end_init_add_build_run() {
         String::from_utf8_lossy(&fmt.stderr)
     );
 
+    // Long command names and long descriptions must stay rustfmt-clean.
+    Command::cargo_bin("max")
+        .unwrap()
+        .current_dir(&project)
+        .args([
+            "cmd",
+            "add",
+            "a_very_long_command_name_here",
+            "--desc",
+            "this is a deliberately long description that goes well beyond one hundred columns to prove the scaffold stays rustfmt-clean",
+        ])
+        .assert()
+        .success();
+
+    let fmt_long = std::process::Command::new("cargo")
+        .arg("fmt")
+        .arg("--check")
+        .current_dir(&project)
+        .output()
+        .expect("cargo fmt --check should run in the generated project");
+    assert!(
+        fmt_long.status.success(),
+        "long name/desc broke rustfmt cleanliness:\n{}",
+        String::from_utf8_lossy(&fmt_long.stderr)
+    );
+
     // cargo test builds the scaffold AND runs the template unit tests.
     let test = std::process::Command::new("cargo")
         .arg("test")

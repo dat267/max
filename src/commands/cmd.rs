@@ -95,7 +95,63 @@ fn execute_add(args: CmdAddArgs) -> Result<()> {
         println!("Updated {main_path}");
     }
 
+    // Normalize the touched files with rustfmt so the project stays
+    // rustfmt-clean regardless of command name or description length.
+    // Best-effort: a missing/failing rustfmt is not fatal.
+    let mut touched = vec![handler_path, mod_path.to_string(), cli_path.to_string()];
+    if Path::new(main_path).exists() {
+        touched.push(main_path.to_string());
+    }
+    if let Err(e) = normalize_with_rustfmt(&touched) {
+        eprintln!("warning: could not normalize formatting with rustfmt: {e:#}");
+        eprintln!(
+            "warning: install the rustfmt component (e.g. `rustup component add rustfmt`) or run `cargo fmt` in the project to format the generated code"
+        );
+    }
+
     println!("Added command {leaf:?}");
+    Ok(())
+}
+
+fn project_edition() -> String {
+    fs::read_to_string("Cargo.toml")
+        .map(|s| edition_from_manifest(&s))
+        .unwrap_or_else(|_| "2024".to_string())
+}
+
+fn edition_from_manifest(manifest: &str) -> String {
+    manifest
+        .lines()
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("edition = ")
+                .map(|v| v.trim_matches('"').to_string())
+        })
+        .filter(|e| !e.is_empty())
+        .unwrap_or_else(|| "2024".to_string())
+}
+
+fn normalize_with_rustfmt(files: &[String]) -> Result<()> {
+    let edition = project_edition();
+    let output = match std::process::Command::new("rustfmt")
+        .arg("--edition")
+        .arg(&edition)
+        .args(files)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!("rustfmt binary not found on PATH")
+        }
+        Err(e) => return Err(e.into()),
+    };
+    if !output.status.success() {
+        anyhow::bail!(
+            "rustfmt exited with status {:?}: {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
     Ok(())
 }
 
@@ -446,6 +502,22 @@ mod tests {
             src.contains("about = \"say \\\"hi\\\" and \\\\ stuff\\non two lines\""),
             "unexpected output:\n{src}"
         );
+    }
+
+    #[test]
+    fn edition_parsed_from_manifest() {
+        assert_eq!(
+            edition_from_manifest("[package]\nedition = \"2024\"\n"),
+            "2024"
+        );
+        assert_eq!(edition_from_manifest("edition = \"2021\"\n"), "2021");
+    }
+
+    #[test]
+    fn edition_defaults_when_missing() {
+        assert_eq!(edition_from_manifest("[package]\nname = \"x\"\n"), "2024");
+        assert_eq!(edition_from_manifest(""), "2024");
+        assert_eq!(edition_from_manifest("edition = \"\"\n"), "2024");
     }
 
     #[test]

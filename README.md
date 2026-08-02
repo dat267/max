@@ -80,6 +80,11 @@ Command names may use dot-separated paths, but `max` only uses the last
 segment: `max cmd add admin.users` generates a single flat `Users` command,
 not nested subcommands. Every segment must form a valid Rust identifier.
 
+After codegen, `max` runs `rustfmt` on the modified files (when available)
+so generated projects stay `cargo fmt --check`-clean even for long command
+names and descriptions. Without `rustfmt`, it warns and leaves formatting
+to you.
+
 ## Config set
 
 ```bash
