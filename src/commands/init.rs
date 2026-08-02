@@ -10,15 +10,42 @@ struct Template {
 }
 
 const TEMPLATES: &[Template] = &[
-    Template { path: "Cargo.toml", content: include_str!("../../templates/Cargo.toml") },
-    Template { path: ".gitignore", content: include_str!("../../templates/.gitignore") },
-    Template { path: ".github/workflows/release.yml", content: include_str!("../../templates/.github/workflows/release.yml") },
-    Template { path: "src/main.rs", content: include_str!("../../templates/src/main.rs") },
-    Template { path: "src/cli.rs", content: include_str!("../../templates/src/cli.rs") },
-    Template { path: "src/config.rs", content: include_str!("../../templates/src/config.rs") },
-    Template { path: "src/commands/mod.rs", content: include_str!("../../templates/src/commands/mod.rs") },
-    Template { path: "src/commands/greet.rs", content: include_str!("../../templates/src/commands/greet.rs") },
-    Template { path: "src/commands/config.rs", content: include_str!("../../templates/src/commands/config.rs") },
+    Template {
+        path: "Cargo.toml",
+        content: include_str!("../../templates/Cargo.toml"),
+    },
+    Template {
+        path: ".gitignore",
+        content: include_str!("../../templates/.gitignore"),
+    },
+    Template {
+        path: ".github/workflows/release.yml",
+        content: include_str!("../../templates/.github/workflows/release.yml"),
+    },
+    Template {
+        path: "src/main.rs",
+        content: include_str!("../../templates/src/main.rs"),
+    },
+    Template {
+        path: "src/cli.rs",
+        content: include_str!("../../templates/src/cli.rs"),
+    },
+    Template {
+        path: "src/config.rs",
+        content: include_str!("../../templates/src/config.rs"),
+    },
+    Template {
+        path: "src/commands/mod.rs",
+        content: include_str!("../../templates/src/commands/mod.rs"),
+    },
+    Template {
+        path: "src/commands/greet.rs",
+        content: include_str!("../../templates/src/commands/greet.rs"),
+    },
+    Template {
+        path: "src/commands/config.rs",
+        content: include_str!("../../templates/src/commands/config.rs"),
+    },
 ];
 
 pub fn execute(args: InitArgs, _cfg: &Config, _config_path: &Path) -> Result<()> {

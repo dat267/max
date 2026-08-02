@@ -18,13 +18,15 @@ fn main() -> Result<()> {
 
 fn run_command(cli: Cli, cfg: &Config, config_path: &Path) -> Result<()> {
     match cli.command {
-        Commands::Init(args) => commands::init::execute(args, cfg, config_path)
-            .context("init command failed")?,
-        Commands::Cmd(args) => commands::cmd::execute(args, cfg, config_path)
-            .context("cmd command failed")?,
-        Commands::Config(cmd) => commands::config::execute(cmd, cfg, config_path)
-            .context("config command failed")?,
-        // __CMD_DISPATCH_MARKER__
+        Commands::Init(args) => {
+            commands::init::execute(args, cfg, config_path).context("init command failed")?
+        }
+        Commands::Cmd(args) => {
+            commands::cmd::execute(args, cfg, config_path).context("cmd command failed")?
+        }
+        Commands::Config(cmd) => {
+            commands::config::execute(cmd, cfg, config_path).context("config command failed")?
+        } // __CMD_DISPATCH_MARKER__
     }
     Ok(())
 }

@@ -5,9 +5,14 @@ use std::path::Path;
 
 fn set_nested(m: &mut serde_json::Value, key: &str, value: serde_json::Value) -> Result<()> {
     if let Some((first, rest)) = key.split_once('.') {
-        let map = m.as_object_mut().ok_or_else(|| anyhow::anyhow!("cannot set key {key:?}: expected object"))?;
+        let map = m
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("cannot set key {key:?}: expected object"))?;
         if !map.contains_key(first) {
-            map.insert(first.to_string(), serde_json::Value::Object(serde_json::Map::new()));
+            map.insert(
+                first.to_string(),
+                serde_json::Value::Object(serde_json::Map::new()),
+            );
         }
         if let Some(sub) = map.get_mut(first) {
             set_nested(sub, rest, value)?;
@@ -66,18 +71,33 @@ pub fn execute(cmd: ConfigCommands, _cfg: &Config, config_path: &Path) -> Result
             if config_path.exists() && !init_args.force {
                 anyhow::bail!("config file already exists at {}", config_path.display());
             }
-            write_config(config_path, &serde_json::Value::Object(serde_json::Map::new()))?;
+            write_config(
+                config_path,
+                &serde_json::Value::Object(serde_json::Map::new()),
+            )?;
             println!("Config file created at {}", config_path.display());
         }
         ConfigCommands::Set(set_args) => {
-            let path = set_args.config_file.as_ref().map(Path::new).unwrap_or(config_path);
+            let path = set_args
+                .config_file
+                .as_ref()
+                .map(Path::new)
+                .unwrap_or(config_path);
             let mut config = read_config(path)?;
-            set_nested(&mut config, &set_args.key, serde_json::Value::String(set_args.value.clone()))?;
+            set_nested(
+                &mut config,
+                &set_args.key,
+                serde_json::Value::String(set_args.value.clone()),
+            )?;
             write_config(path, &config)?;
             println!("{} = {}", set_args.key, set_args.value);
         }
         ConfigCommands::Unset(unset_args) => {
-            let path = unset_args.config_file.as_ref().map(Path::new).unwrap_or(config_path);
+            let path = unset_args
+                .config_file
+                .as_ref()
+                .map(Path::new)
+                .unwrap_or(config_path);
             let mut config = read_config(path)?;
             unset_nested(&mut config, &unset_args.key)?;
             write_config(path, &config)?;
@@ -108,7 +128,9 @@ pub fn execute(cmd: ConfigCommands, _cfg: &Config, config_path: &Path) -> Result
                 std::fs::write(config_path, b"{}\n")?;
             }
             let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
-            let status = std::process::Command::new(&editor).arg(config_path).status()?;
+            let status = std::process::Command::new(&editor)
+                .arg(config_path)
+                .status()?;
             if !status.success() {
                 anyhow::bail!("editor exited with error");
             }

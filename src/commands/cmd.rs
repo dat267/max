@@ -43,7 +43,9 @@ fn execute_add(args: CmdAddArgs) -> Result<()> {
         anyhow::bail!("no src/cli.rs found (run 'max init' first)");
     }
     if !Path::new("src/config.rs").exists() {
-        anyhow::bail!("no src/config.rs found — run 'max init' first or check you are in a project directory");
+        anyhow::bail!(
+            "no src/config.rs found — run 'max init' first or check you are in a project directory"
+        );
     }
 
     let (leaf, struct_name, mod_name) = derive_command(&args.name)?;
@@ -66,7 +68,11 @@ fn execute_add(args: CmdAddArgs) -> Result<()> {
     // Add args struct to cli.rs
     let cli_path = "src/cli.rs";
     let cli_content = fs::read_to_string(cli_path)?;
-    let new_content = format!("{}{}", cli_content.trim_end(), build_struct_def(&struct_name));
+    let new_content = format!(
+        "{}{}",
+        cli_content.trim_end(),
+        build_struct_def(&struct_name)
+    );
     fs::write(cli_path, new_content)?;
 
     // Re-read file after struct insertion
@@ -172,11 +178,16 @@ fn build_dispatch_arm(mod_name: &str, struct_name: &str) -> String {
 }
 
 fn insert_before_marker(content: &str, marker: &str, insertion: &str) -> Result<String> {
-    let pos = content
-        .find(marker)
-        .ok_or_else(|| anyhow::anyhow!("codegen marker {marker:?} not found in generated project files"))?;
+    let pos = content.find(marker).ok_or_else(|| {
+        anyhow::anyhow!("codegen marker {marker:?} not found in generated project files")
+    })?;
     let (before, after) = content.split_at(pos);
-    Ok(format!("{}{}\n{}", before, insertion.trim_end(), after.trim_start()))
+    Ok(format!(
+        "{}{}\n{}",
+        before,
+        insertion.trim_end(),
+        after.trim_start()
+    ))
 }
 
 fn insert_enum_variant(cli_content: &str, variant_source: &str) -> Result<String> {
