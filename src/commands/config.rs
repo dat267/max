@@ -116,3 +116,70 @@ pub fn execute(cmd: ConfigCommands, _cfg: &Config, config_path: &Path) -> Result
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn set_flat_key() {
+        let mut v = json!({});
+        set_nested(&mut v, "greeting", json!("hello")).unwrap();
+        assert_eq!(v, json!({"greeting": "hello"}));
+    }
+
+    #[test]
+    fn set_nested_creates_intermediates() {
+        let mut v = json!({});
+        set_nested(&mut v, "core.timeout", json!("5m")).unwrap();
+        assert_eq!(v, json!({"core": {"timeout": "5m"}}));
+    }
+
+    #[test]
+    fn set_overwrites_existing() {
+        let mut v = json!({"core": {"timeout": "2m"}});
+        set_nested(&mut v, "core.timeout", json!("5m")).unwrap();
+        assert_eq!(v, json!({"core": {"timeout": "5m"}}));
+    }
+
+    #[test]
+    fn set_on_scalar_root_errors() {
+        let mut v = json!(42);
+        assert!(set_nested(&mut v, "key", json!("x")).is_err());
+    }
+
+    #[test]
+    fn set_nested_on_scalar_in_path_errors() {
+        let mut v = json!({"core": 7});
+        assert!(set_nested(&mut v, "core.timeout", json!("5m")).is_err());
+    }
+
+    #[test]
+    fn unset_removes_leaf_keeps_siblings() {
+        let mut v = json!({"a": {"b": 1, "keep": 2}});
+        unset_nested(&mut v, "a.b").unwrap();
+        assert_eq!(v, json!({"a": {"keep": 2}}));
+    }
+
+    #[test]
+    fn unset_prunes_empty_parents() {
+        let mut v = json!({"a": {"b": 1}});
+        unset_nested(&mut v, "a.b").unwrap();
+        assert_eq!(v, json!({}));
+    }
+
+    #[test]
+    fn unset_missing_key_noop() {
+        let mut v = json!({"a": 1});
+        unset_nested(&mut v, "nope").unwrap();
+        assert_eq!(v, json!({"a": 1}));
+    }
+
+    #[test]
+    fn unset_on_scalar_root_noop() {
+        let mut v = json!(42);
+        unset_nested(&mut v, "a").unwrap();
+        assert_eq!(v, json!(42));
+    }
+}
